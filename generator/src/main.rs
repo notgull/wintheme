@@ -40,8 +40,6 @@ fn main() -> io::Result<()> {
 
             // Read items from the table.
             for mut row in table.rows {
-                writeln!(cout, "{:?}", &row)?;
-
                 match row.len() {
                     2 | 3 => {
                         // Ignore the first entry if there are 3 entires.
@@ -51,8 +49,19 @@ fn main() -> io::Result<()> {
 
                         // Take the last part and put it into parts.
                         let new_part = Part {
-                            name: row.remove(0),
-                            states: row[0].split(',').map(|s| s.trim().to_string()).collect(),
+                            name: {
+                                let mut name = row.remove(0).split(' ').next().unwrap().to_string();
+                                name.retain(|c| c != '\\');
+                                name
+                            },
+                            states: row[0]
+                                .split(',')
+                                .map(|s| s.split(' ').next().unwrap().trim().to_string())
+                                .map(|mut s| {
+                                    s.retain(|c| c != '\\');
+                                    s
+                                })
+                                .collect(),
                         };
                         if let Some(part) = current_part.replace(new_part) {
                             parts.push(part);
@@ -61,13 +70,23 @@ fn main() -> io::Result<()> {
 
                     1 => {
                         // Push this entry into the current part.
-                        current_part.states.extend(row[0].split(',').map(|s| s.trim().to_string()).collect());
+                        current_part.as_mut().unwrap().states.extend(
+                            row[0]
+                                .split(',')
+                                .map(|s| s.split(' ').next().unwrap().trim().to_string())
+                                .map(|mut s| {
+                                    s.retain(|c| c != '\\');
+                                    s
+                                }),
+                        )
                     }
 
-                    len => return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("Unexpected length: {len}")
-                    ))
+                    len => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::Other,
+                            format!("Unexpected length: {len}"),
+                        ))
+                    }
                 }
             }
 
@@ -76,6 +95,72 @@ fn main() -> io::Result<()> {
             break;
         }
     }
+
+    // Remove the first two entries.
+    for _ in 0..2 {
+        parts.remove(0);
+    }
+
+    // Output the Part enum.
+    writeln!(cout, "/// The part of the widget theme to retrieve.")?;
+    writeln!(
+        cout,
+        "#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]"
+    )?;
+    writeln!(cout, "#[non_exhaustive]")?;
+    writeln!(cout, "pub enum Part {{")?;
+
+    for part in &parts {
+        writeln!(cout, "    /// The `{}` part.", part.name)?;
+        writeln!(cout, "    {0}({0}),", rust_part_name(&part.name))?;
+    }
+
+    writeln!(cout, "}}")?;
+
+    // Output the individual enums.
+    for part in &parts {
+        writeln!(cout, "/// The state of the `{}` part.", part.name)?;
+        writeln!(
+            cout,
+            "#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]"
+        )?;
+        writeln!(cout, "#[non_exhaustive]")?;
+        writeln!(cout, "#[repr(i32)]")?;
+        writeln!(cout, "pub enum {} {{", rust_part_name(&part.name))?;
+        writeln!(cout, "    /// The default state.")?;
+        writeln!(cout, "    None = 0,")?;
+
+        for state in part.states.iter().filter(|s| !s.is_empty()) {
+            writeln!(cout, "    /// The `{state}` state.")?;
+            writeln!(
+                cout,
+                "    {0} = windows_sys::Win32::UI::Controls::{1},",
+                rust_part_name(state),
+                state
+            )?;
+        }
+
+        writeln!(cout, "}}")?;
+    }
+
+    // Output the `Part::part_and_state` method.
+    writeln!(cout, "impl Part {{")?;
+    writeln!(cout, "    /// Returns the part and state for this part.")?;
+    writeln!(
+        cout,
+        "    pub(super) fn part_and_state(self) -> (i32, i32) {{"
+    )?;
+    writeln!(cout, "        match self {{")?;
+
+    for part in &parts {
+        writeln!(cout, "            Self::{0}(state) => (windows_sys::Win32::UI::Controls::{1}, state as i32),", rust_part_name(&part.name), part.name)?;
+    }
+
+    writeln!(cout, "        }}")?;
+    writeln!(cout, "    }}")?;
+    writeln!(cout, "}}")?;
+
+    //writeln!(cout, "{:#?}", parts);
 
     Ok(())
 }
@@ -119,7 +204,19 @@ impl Table {
     }
 }
 
+#[derive(Debug)]
 struct Part {
     name: String,
     states: Vec<String>,
+}
+
+fn rust_part_name(part: &str) -> impl std::fmt::Display + '_ {
+    let split = part.split('_').collect::<Vec<_>>();
+    let name = if split.len() > 1 {
+        &split[1]
+    } else {
+        &split[0]
+    };
+
+    heck::AsUpperCamelCase(*name)
 }
