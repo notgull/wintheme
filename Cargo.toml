@@ -2,6 +2,12 @@
 name = "wintheme"
 version = "0.1.0"
 edition = "2021"
+authors = ["John Nunley <jtnunley01@gmail.com>"]
+description = "A library for reading Windows themes."
+license = "BSL-1.0 OR Apache-2.0"
+keywords = ["windows", "theme", "ui"]
+categories = ["api-bindings", "gui-toolkit"]
+repository = "https://github.com/notgull/wintheme"
 
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = "0.45.0"
