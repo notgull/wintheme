@@ -10,3 +10,6 @@ features = ["Win32_UI_Controls", "Win32_Foundation", "Win32_UI_WindowsAndMessagi
 
 [target.'cfg(windows)'.build-dependencies]
 autocfg = "1.1.0"
+
+[workspace]
+members = ["generator"]
